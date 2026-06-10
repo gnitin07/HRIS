@@ -1,7 +1,19 @@
 import axios from 'axios';
 
+const getBaseURL = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  const rawUrl = envUrl || (import.meta.env.PROD ? 'https://hris-zfd7.onrender.com/api' : '/api');
+
+  if (rawUrl === '/api') {
+    return rawUrl;
+  }
+
+  const normalizedUrl = rawUrl.replace(/\/$/, '');
+  return normalizedUrl.endsWith('/api') ? normalizedUrl : `${normalizedUrl}/api`;
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json',
   },
