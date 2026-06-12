@@ -34,11 +34,16 @@ function isSunday(dateStr) {
 }
 
 function getTodayDate() {
-  return new Date().toISOString().split('T')[0];
+  return new Date().toLocaleDateString('en-CA', {
+    timeZone: 'Asia/Kolkata'
+  });
 }
 
 function getCurrentTime() {
-  return new Date().toTimeString().split(' ')[0];
+  return new Date().toLocaleTimeString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour12: false
+  });
 }
 
 
