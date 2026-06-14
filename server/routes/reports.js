@@ -99,6 +99,8 @@ router.get('/attendance', async (req, res) => {
           WHEN EXTRACT(DOW FROM ds.date) = 0 THEN 'Sunday'
           WHEN h.name IS NOT NULL THEN 'Restricted Holiday'
           WHEN a.status = 'present' AND a.attendance_mode = 'wfh' THEN 'WFH Present'
+          WHEN lr.id IS NOT NULL AND lr.status = 'approved' AND a.status IS NULL THEN 'WFH Approved (No Check-in)'
+          WHEN lr.id IS NOT NULL AND lr.status = 'pending' THEN 'WFH-Pending'
           WHEN a.status = 'present' AND a.attendance_mode = 'wfo' THEN 'WFO Present'
           WHEN a.status = 'late' THEN 'WFO Late'
           WHEN a.status = 'casual' THEN 'Casual Leave (CL)'
@@ -121,6 +123,7 @@ router.get('/attendance', async (req, res) => {
       LEFT JOIN attendance a ON a.employee_id = ae.id AND a.date = ds.date
       LEFT JOIN holidays h ON h.date = ds.date
       LEFT JOIN balances b ON b.employee_id = ae.id
+      LEFT JOIN leave_requests lr ON lr.employee_id = ae.id AND ds.date BETWEEN lr.from_date AND lr.to_date AND lr.leave_type = 'wfh' AND lr.status != 'rejected'
       ORDER BY ds.date ASC, ae.name ASC
     `, params);
 
@@ -155,13 +158,15 @@ router.get('/attendance', async (req, res) => {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
     const statusColors = {
-      'WFO Present':        'FFD4EDDA',
-      'WFH Present':        'FFD1ECF1',
-      'WFO Late':           'FFFFF3CD',
-      'Casual Leave (CL)':  'FFFDE8D8',
-      'Absent':             'FFF8D7DA',
-      'Sunday':             'FFF5F5F5',
-      'Restricted Holiday': 'FFE2D9F3',
+      'WFO Present':                  'FFD4EDDA',
+      'WFH Present':                  'FFD1ECF1',
+      'WFH Approved (No Check-in)':   'FFE2E3E5',
+      'WFH-Pending':                  'FFFFEeba',
+      'WFO Late':                     'FFFFF3CD',
+      'Casual Leave (CL)':            'FFFDE8D8',
+      'Absent':                       'FFF8D7DA',
+      'Sunday':                       'FFF5F5F5',
+      'Restricted Holiday':           'FFE2D9F3',
     };
 
     result.rows.forEach(row => {

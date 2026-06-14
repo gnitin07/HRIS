@@ -62,17 +62,7 @@ export default function MyAttendancePanel({ title = "My Attendance Today" }) {
     );
   };
 
-  const handleWFH = async () => {
-    setActionLoading(true);
-    try {
-      await api.post('/attendance/wfh');
-      await fetchData();
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to mark WFH');
-    } finally {
-      setActionLoading(false);
-    }
-  };
+
 
   const markNotifRead = async (id) => {
     try {
@@ -88,6 +78,7 @@ export default function MyAttendancePanel({ title = "My Attendance Today" }) {
   const isCheckedIn = status?.attendance?.check_in;
   const isCheckedOut = status?.attendance?.check_out;
   const isWfh = status?.attendance?.attendance_mode === 'wfh';
+  const isWfhApproved = status?.is_wfh_approved;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -118,9 +109,9 @@ export default function MyAttendancePanel({ title = "My Attendance Today" }) {
             {status?.is_sunday && <div style={styles.statusBadge}>Sunday</div>}
             {status?.is_holiday && <div style={styles.statusBadge}>Holiday: {status?.holiday_name}</div>}
             {status?.on_approved_leave && <div style={styles.statusBadge}>On Leave</div>}
-            {isWfh && <div style={styles.statusBadge}>Working From Home</div>}
+            {(isWfh || isWfhApproved) && <div style={styles.statusBadge}>Working From Home</div>}
 
-            {!status?.is_sunday && !status?.is_holiday && !status?.on_approved_leave && !isWfh && (
+            {!status?.is_sunday && !status?.is_holiday && !status?.on_approved_leave && (
               <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
                 <div style={styles.timeBlock}>
                   <div style={styles.timeLabel}>Check In</div>
@@ -137,15 +128,15 @@ export default function MyAttendancePanel({ title = "My Attendance Today" }) {
           {locationError && <div style={styles.error}><AlertCircle size={16} /> {locationError}</div>}
 
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            {(!isCheckedIn || (!isCheckedOut && isCheckedIn)) && !isWfh && !status?.on_approved_leave && !status?.is_sunday && !status?.is_holiday && (
+            {(!isCheckedIn || (!isCheckedOut && isCheckedIn)) && !status?.on_approved_leave && !status?.is_sunday && !status?.is_holiday && (
               <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleCheckInOut} disabled={actionLoading}>
-                {actionLoading ? 'Locating...' : (isCheckedIn ? 'Check Out' : 'Check In (WFO)')}
+                {actionLoading ? 'Locating...' : (isCheckedIn ? 'Check Out' : (isWfhApproved ? 'Check In (WFH)' : 'Check In (WFO)'))}
               </button>
             )}
-            {!isCheckedIn && !status?.on_approved_leave && !status?.is_sunday && !status?.is_holiday && (
-              <button className="btn btn-outline" style={{ flex: 1 }} onClick={handleWFH} disabled={actionLoading}>
-                Mark WFH
-              </button>
+            {!isCheckedIn && !status?.on_approved_leave && !status?.is_sunday && !status?.is_holiday && !isWfhApproved && (
+               <div style={{ flex: 1, fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                 Want to WFH? Apply via the Leave tab.
+               </div>
             )}
           </div>
         </div>

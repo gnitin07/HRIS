@@ -156,6 +156,12 @@ router.put('/approve/:id', auth, roleCheck('hr', 'super_admin'), async (req, res
            WHERE employee_id = $1 AND year = $2 AND month = $3`,
           [leave.employee_id, year, month]
         );
+      } else if (leave.leave_type === 'wfh') {
+        await pool.query(
+          `UPDATE leave_balances SET wfh_used = wfh_used + 1
+           WHERE employee_id = $1 AND year = $2 AND month = $3`,
+          [leave.employee_id, year, month]
+        );
       }
 
       // Mark attendance as leave
@@ -164,13 +170,17 @@ router.put('/approve/:id', auth, roleCheck('hr', 'super_admin'), async (req, res
         : leave.from_date;
 
       if (new Date(leaveDate).getDay() !== 0) {
-        await pool.query(
-          `INSERT INTO attendance (employee_id, date, status, attendance_mode, leave_type)
-           VALUES ($1, $2, 'casual', 'leave', $3)
-           ON CONFLICT (employee_id, date) 
-           DO UPDATE SET status='casual', attendance_mode='leave', leave_type=$3`,
-          [leave.employee_id, leaveDate, leave.leave_type]
-        );
+        if (leave.leave_type === 'casual') {
+          await pool.query(
+            `INSERT INTO attendance (employee_id, date, status, attendance_mode, leave_type)
+             VALUES ($1, $2, 'casual', 'leave', $3)
+             ON CONFLICT (employee_id, date) 
+             DO UPDATE SET status='casual', attendance_mode='leave', leave_type=$3`,
+            [leave.employee_id, leaveDate, leave.leave_type]
+          );
+        }
+        // If leave_type is wfh, we intentionally do NOT insert attendance yet.
+        // The employee must manually 'Check In' which will insert the attendance record with mode='wfh'.
       }
     }
 

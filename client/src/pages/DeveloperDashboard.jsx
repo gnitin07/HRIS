@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Database, Users } from 'lucide-react';
+import { Activity, Database, Users, Wrench } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
 
@@ -65,6 +65,33 @@ export default function DeveloperDashboard() {
             Directly modify employee records and bypass HR isolation rules.
           </p>
           <Link to="/developer/users" className="btn btn-primary" style={{ width: '100%' }}>Manage Records</Link>
+        </div>
+
+        <div className="glass-panel" style={{ padding: '24px' }}>
+          <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Wrench size={20} color="var(--danger)" /> Quick Tools
+          </h3>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '16px', fontSize: '0.9rem' }}>
+            Reset WFH attendance or fix broken records manually.
+          </p>
+          <button 
+            className="btn btn-outline" 
+            style={{ width: '100%', borderColor: 'var(--danger)', color: 'var(--danger)' }}
+            onClick={() => {
+              const empId = prompt('Enter Employee ID (e.g. EMP7710):');
+              if (!empId) return;
+              const date = prompt('Enter Date to reset (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
+              if (!date) return;
+              
+              if (window.confirm(`Are you sure you want to reset WFH for ${empId} on ${date}?`)) {
+                api.post('/system/reset-wfh', { emp_id: empId, date })
+                  .then(res => alert(res.data.message))
+                  .catch(err => alert(err.response?.data?.message || 'Error resetting WFH'));
+              }
+            }}
+          >
+            Reset WFH Record
+          </button>
         </div>
       </div>
     </div>

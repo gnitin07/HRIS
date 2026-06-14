@@ -116,14 +116,28 @@ router.get('/today-status', auth, async (req, res) => {
       [employeeId, month, year]
     );
 
-    res.json({
-      is_sunday: isSunday(today),
-      is_holiday: holidayRes.rows.length > 0,
-      holiday_name: holidayRes.rows[0]?.name || null,
-      attendance: attendanceRes.rows[0] || null,
-      on_approved_leave: leaveRes.rows.length > 0,
-      approved_leave: leaveRes.rows[0] || null,
-      employee: {
+      // Check leave type
+      const leave = leaveRes.rows[0] || null;
+      let isWfhApproved = false;
+      let onApprovedLeave = false;
+      
+      if (leave) {
+        if (leave.leave_type === 'wfh') {
+          isWfhApproved = true;
+        } else {
+          onApprovedLeave = true;
+        }
+      }
+
+      res.json({
+        is_sunday: isSunday(today),
+        is_holiday: holidayRes.rows.length > 0,
+        holiday_name: holidayRes.rows[0]?.name || null,
+        attendance: attendanceRes.rows[0] || null,
+        on_approved_leave: onApprovedLeave,
+        approved_leave: leave,
+        is_wfh_approved: isWfhApproved,
+        employee: {
         wfh_days_month: emp.wfh_days_month,
         designation: emp.designation,
         cl_total: emp.cl_total,
@@ -161,26 +175,33 @@ router.post('/checkin', auth, async (req, res) => {
       return res.status(400).json({ message: `Today is a holiday: ${holiday.rows[0].name}` });
     }
 
-    // Block: On approved leave
+    // Block: On approved casual leave
     const leave = await pool.query(
       `SELECT * FROM leave_requests 
        WHERE employee_id = $1 AND $2 BETWEEN from_date AND to_date AND status = 'approved'`,
       [employeeId, today]
     );
+    let isWfhApproved = false;
     if (leave.rows.length > 0) {
-      return res.status(400).json({ message: 'You are on approved leave today.' });
+      if (leave.rows[0].leave_type === 'wfh') {
+        isWfhApproved = true;
+      } else {
+        return res.status(400).json({ message: 'You are on approved leave today.' });
+      }
     }
 
-    // Validate geofence
-    const officeLat = parseFloat(await getSetting('office_lat'));
-    const officeLng = parseFloat(await getSetting('office_lng'));
-    const radius = parseFloat(await getSetting('office_radius_meters'));
+    // Validate geofence ONLY IF not WFH
+    if (!isWfhApproved) {
+      const officeLat = parseFloat(await getSetting('office_lat'));
+      const officeLng = parseFloat(await getSetting('office_lng'));
+      const radius = parseFloat(await getSetting('office_radius_meters'));
 
-    const geo = checkGeofence(latitude, longitude, officeLat, officeLng, radius);
-    if (!geo.inside) {
-      return res.status(403).json({
-        message: `You are ${geo.distance}m away. Must be within ${radius}m of office.`,
-      });
+      const geo = checkGeofence(latitude, longitude, officeLat, officeLng, radius);
+      if (!geo.inside) {
+        return res.status(403).json({
+          message: `You are ${geo.distance}m away. Must be within ${radius}m of office.`,
+        });
+      }
     }
 
     // Determine late/on-time
@@ -216,22 +237,24 @@ router.post('/checkin', auth, async (req, res) => {
       }
 
       // Update existing (e.g., was marked absent, now checking in)
+      const mode = isWfhApproved ? 'wfh' : 'wfo';
       await pool.query(
         `UPDATE attendance 
-         SET check_in=$1, status=$2, attendance_mode='wfo', check_in_lat=$3, check_in_lng=$4
-         WHERE employee_id=$5 AND date=$6`,
-        [timeStr, status, latitude, longitude, employeeId, today]
+         SET check_in=$1, status=$2, attendance_mode=$3, check_in_lat=$4, check_in_lng=$5
+         WHERE employee_id=$6 AND date=$7`,
+        [timeStr, status, mode, latitude, longitude, employeeId, today]
       );
     } else {
       // Fresh check-in
+      const mode = isWfhApproved ? 'wfh' : 'wfo';
       await pool.query(
         `INSERT INTO attendance (employee_id, date, check_in, check_in_lat, check_in_lng, status, attendance_mode)
-         VALUES ($1, $2, $3, $4, $5, $6, 'wfo')`,
-        [employeeId, today, timeStr, latitude, longitude, status]
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [employeeId, today, timeStr, latitude, longitude, status, mode]
       );
     }
 
-    res.json({ message: 'Checked in (WFO)', status, type: 'checkin', time: timeStr });
+    res.json({ message: `Checked in (${isWfhApproved ? 'WFH' : 'WFO'})`, status, type: 'checkin', time: timeStr });
   } catch (err) {
     console.error('Checkin error:', err.message);
     res.status(500).json({ message: 'Server error' });
@@ -274,84 +297,6 @@ router.post('/checkout', auth, async (req, res) => {
   }
 });
 
-
-/* ═══════════════════════════════════════
-   POST /api/attendance/wfh
-   Mark WFH — deducts from monthly WFH balance
-   ═══════════════════════════════════════ */
-router.post('/wfh', auth, async (req, res) => {
-  const employeeId = req.user.id;
-  const today = getTodayDate();
-  const year = new Date().getFullYear();
-  const month = new Date().getMonth() + 1;
-
-  try {
-    // Basic blocks
-    if (isSunday(today)) return res.status(400).json({ message: 'Today is Sunday.' });
-
-    const holiday = await pool.query('SELECT * FROM holidays WHERE date = $1', [today]);
-    if (holiday.rows.length > 0) return res.status(400).json({ message: `Holiday: ${holiday.rows[0].name}` });
-
-    const leave = await pool.query(
-      `SELECT * FROM leave_requests WHERE employee_id = $1 AND $2 BETWEEN from_date AND to_date AND status = 'approved'`,
-      [employeeId, today]
-    );
-    if (leave.rows.length > 0) return res.status(400).json({ message: 'You are on approved leave today.' });
-
-    // Check WFH allowance
-    const emp = await pool.query('SELECT * FROM employees WHERE id = $1', [employeeId]);
-    if (!emp.rows[0].wfh_days_month || emp.rows[0].wfh_days_month === 0) {
-      return res.status(403).json({ message: 'You do not have WFH allowance.' });
-    }
-
-    // Get or create WFH balance
-    let wfhBal = await pool.query(
-      'SELECT * FROM leave_balances WHERE employee_id = $1 AND year = $2 AND month = $3',
-      [employeeId, year, month]
-    );
-
-    if (wfhBal.rows.length === 0) {
-      await pool.query(
-        `INSERT INTO leave_balances (employee_id, year, month, casual_total, casual_used, wfh_total, wfh_used)
-         VALUES ($1, $2, $3, 0, 0, $4, 0)`,
-        [employeeId, year, month, emp.rows[0].wfh_days_month]
-      );
-      wfhBal = await pool.query(
-        'SELECT * FROM leave_balances WHERE employee_id = $1 AND year = $2 AND month = $3',
-        [employeeId, year, month]
-      );
-    }
-
-    const wfhLeft = wfhBal.rows[0].wfh_total - wfhBal.rows[0].wfh_used;
-    if (wfhLeft <= 0) return res.status(400).json({ message: 'No WFH days remaining this month.' });
-
-    // Check already marked
-    const existing = await pool.query(
-      'SELECT * FROM attendance WHERE employee_id = $1 AND date = $2',
-      [employeeId, today]
-    );
-    if (existing.rows.length > 0) return res.status(400).json({ message: 'Attendance already marked today.' });
-
-    // Mark WFH
-    const timeStr = getCurrentTime();
-    await pool.query(
-      `INSERT INTO attendance (employee_id, date, check_in, status, attendance_mode)
-       VALUES ($1, $2, $3, 'present', 'wfh')`,
-      [employeeId, today, timeStr]
-    );
-
-    // Deduct WFH balance
-    await pool.query(
-      'UPDATE leave_balances SET wfh_used = wfh_used + 1 WHERE employee_id = $1 AND year = $2 AND month = $3',
-      [employeeId, year, month]
-    );
-
-    res.json({ message: 'WFH marked successfully', wfh_remaining: wfhLeft - 1 });
-  } catch (err) {
-    console.error('WFH error:', err.message);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
 
 
 /* ═══════════════════════════════════════
