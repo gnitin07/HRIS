@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/axios';
 import { downloadAttendanceExcel } from '../../utils/downloadReport';
+import { getLocalToday } from '../../utils/dateUtils';
 import { Clock, Download, CheckSquare, Edit } from 'lucide-react';
 
 export default function SAAttendance() {
   const [report, setReport] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalToday();
   const [fromDate, setFromDate] = useState(today);
   const [toDate, setToDate] = useState(today);
   const [deptFilter, setDeptFilter] = useState('');

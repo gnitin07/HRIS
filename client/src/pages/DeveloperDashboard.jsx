@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Activity, Database, Users, Wrench } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
+import { getLocalToday } from '../utils/dateUtils';
 
 export default function DeveloperDashboard() {
   const [overview, setOverview] = useState(null);
@@ -80,7 +81,7 @@ export default function DeveloperDashboard() {
             onClick={() => {
               const empId = prompt('Enter Employee ID (e.g. EMP7710):');
               if (!empId) return;
-              const date = prompt('Enter Date to reset (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
+              const date = prompt('Enter Date to reset (YYYY-MM-DD):', getLocalToday());
               if (!date) return;
               
               if (window.confirm(`Are you sure you want to reset WFH for ${empId} on ${date}?`)) {

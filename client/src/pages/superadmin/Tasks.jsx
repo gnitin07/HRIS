@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../api/axios';
 import EmployeeSearchSelect from '../../components/common/EmployeeSearchSelect';
 import { CheckSquare, Plus } from 'lucide-react';
+import { getLocalToday } from '../../utils/dateUtils';
 
 export default function SATasks() {
   const [tasks, setTasks] = useState([]);
@@ -94,7 +95,7 @@ export default function SATasks() {
             </div>
             <div>
               <label style={styles.label}>Due Date</label>
-              <input type="date" className="input-field" value={formData.due_date} onChange={(e) => setFormData({ ...formData, due_date: e.target.value })} required min={new Date().toISOString().split('T')[0]} />
+              <input type="date" className="input-field" value={formData.due_date} onChange={(e) => setFormData({ ...formData, due_date: e.target.value })} required min={getLocalToday()} />
             </div>
             <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button type="button" className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button>

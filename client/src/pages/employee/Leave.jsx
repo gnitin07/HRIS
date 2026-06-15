@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/axios';
 import { Calendar, Plus } from 'lucide-react';
+import { getLocalToday } from '../../utils/dateUtils';
 
 export default function Leave() {
   const [applications, setApplications] = useState([]);
@@ -64,11 +65,11 @@ export default function Leave() {
             <div style={{ display: 'flex', gap: '16px' }}>
               <div style={{ flex: 1 }}>
                 <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-muted)' }}>From Date</label>
-                <input type="date" className="input-field" value={formData.from_date} onChange={(e) => setFormData({...formData, from_date: e.target.value})} required min={new Date().toISOString().split('T')[0]} />
+                <input type="date" className="input-field" value={formData.from_date} onChange={(e) => setFormData({...formData, from_date: e.target.value})} required min={getLocalToday()} />
               </div>
               <div style={{ flex: 1 }}>
                 <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-muted)' }}>To Date</label>
-                <input type="date" className="input-field" value={formData.to_date} onChange={(e) => setFormData({...formData, to_date: e.target.value})} required min={formData.from_date || new Date().toISOString().split('T')[0]} />
+                <input type="date" className="input-field" value={formData.to_date} onChange={(e) => setFormData({...formData, to_date: e.target.value})} required min={formData.from_date || getLocalToday()} />
               </div>
             </div>
             <div>

@@ -1,21 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/axios';
 import { downloadAttendanceExcel } from '../../utils/downloadReport';
+import { getLocalToday, getLocalStartOfWeek, getLocalStartOfMonth } from '../../utils/dateUtils';
 import { Clock, Download, CheckSquare } from 'lucide-react';
 
-const today = () => new Date().toISOString().split('T')[0];
+const today = () => getLocalToday();
 
-const startOfWeek = () => {
-  const d = new Date();
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  return new Date(d.setDate(diff)).toISOString().split('T')[0];
-};
+const startOfWeek = () => getLocalStartOfWeek();
 
-const startOfMonth = () => {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
-};
+const startOfMonth = () => getLocalStartOfMonth();
+
+
 
 export default function Attendance() {
   const [report, setReport] = useState([]);

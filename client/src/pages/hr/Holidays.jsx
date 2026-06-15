@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/axios';
 import { Calendar, Plus } from 'lucide-react';
+import { getLocalToday } from '../../utils/dateUtils';
 
 export default function HRHolidays() {
   const [holidays, setHolidays] = useState([]);
@@ -55,7 +56,7 @@ export default function HRHolidays() {
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
               <label style={styles.label}>Date</label>
-              <input type="date" className="input-field" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} required min={new Date().toISOString().split('T')[0]} />
+              <input type="date" className="input-field" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} required min={getLocalToday()} />
             </div>
             <div>
               <label style={styles.label}>Holiday Name</label>
