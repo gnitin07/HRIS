@@ -46,6 +46,53 @@ function getCurrentTime() {
   });
 }
 
+/**
+ * Check user location against ALL active office locations.
+ * Returns { allowed: true, officeName } if inside any office geofence,
+ * or { allowed: false, nearest, distance } with the closest office info.
+ */
+async function checkMultiOfficeGeofence(userLat, userLng) {
+  // Query all active office locations
+  const locRes = await pool.query(
+    'SELECT name, latitude, longitude, radius_m FROM office_locations WHERE is_active = true'
+  );
+
+  let offices = locRes.rows;
+
+  // Fallback: if no office_locations rows, use system_settings
+  if (offices.length === 0) {
+    const officeLat = parseFloat(await getSetting('office_lat'));
+    const officeLng = parseFloat(await getSetting('office_lng'));
+    const radius = parseFloat(await getSetting('office_radius_meters')) || 200;
+    offices = [{ name: 'Main Office', latitude: officeLat, longitude: officeLng, radius_m: radius }];
+  }
+
+  let nearest = null;
+  let nearestDist = Infinity;
+
+  for (const office of offices) {
+    const geo = checkGeofence(
+      userLat, userLng,
+      parseFloat(office.latitude), parseFloat(office.longitude),
+      parseInt(office.radius_m)
+    );
+    if (geo.inside) {
+      return { allowed: true, officeName: office.name };
+    }
+    if (geo.distance < nearestDist) {
+      nearestDist = geo.distance;
+      nearest = office;
+    }
+  }
+
+  return {
+    allowed: false,
+    nearest: nearest.name,
+    distance: nearestDist,
+    radius: parseInt(nearest.radius_m),
+  };
+}
+
 
 /* ═══════════════════════════════════════
    GET /api/attendance/today-status
@@ -190,16 +237,12 @@ router.post('/checkin', auth, async (req, res) => {
       }
     }
 
-    // Validate geofence ONLY IF not WFH
+    // Validate geofence ONLY IF not WFH — checks ALL active office locations
     if (!isWfhApproved) {
-      const officeLat = parseFloat(await getSetting('office_lat'));
-      const officeLng = parseFloat(await getSetting('office_lng'));
-      const radius = parseFloat(await getSetting('office_radius_meters'));
-
-      const geo = checkGeofence(latitude, longitude, officeLat, officeLng, radius);
-      if (!geo.inside) {
+      const geoResult = await checkMultiOfficeGeofence(latitude, longitude);
+      if (!geoResult.allowed) {
         return res.status(403).json({
-          message: `You are ${geo.distance}m away. Must be within ${radius}m of office.`,
+          message: `You are ${geoResult.distance}m away from nearest office (${geoResult.nearest}). Must be within ${geoResult.radius}m.`,
         });
       }
     }
@@ -224,15 +267,12 @@ router.post('/checkin', auth, async (req, res) => {
 
       // Already checked in but not out → this is a checkout
       if (record.check_in && !record.check_out) {
-        // Validate geofence on checkout for WFO employees
+        // Validate geofence on checkout for WFO employees — checks ALL active offices
         if (record.attendance_mode === 'wfo') {
-          const officeLat = parseFloat(await getSetting('office_lat'));
-          const officeLng = parseFloat(await getSetting('office_lng'));
-          const radius = parseFloat(await getSetting('office_radius_meters'));
-          const geo = checkGeofence(latitude, longitude, officeLat, officeLng, radius);
-          if (!geo.inside) {
+          const geoResult = await checkMultiOfficeGeofence(latitude, longitude);
+          if (!geoResult.allowed) {
             return res.status(403).json({
-              message: `Cannot check out: You are ${geo.distance}m away. Must be within ${radius}m of office.`,
+              message: `Cannot check out: You are ${geoResult.distance}m away from nearest office (${geoResult.nearest}). Must be within ${geoResult.radius}m.`,
             });
           }
         }
@@ -300,20 +340,16 @@ router.post('/checkout', auth, async (req, res) => {
 
     const record = existing.rows[0];
 
-    // Validate geofence for WFO employees (WFH employees can check out from anywhere)
+    // Validate geofence for WFO employees — checks ALL active offices
     if (record.attendance_mode === 'wfo') {
       if (!latitude || !longitude) {
         return res.status(400).json({ message: 'Location is required for checkout.' });
       }
 
-      const officeLat = parseFloat(await getSetting('office_lat'));
-      const officeLng = parseFloat(await getSetting('office_lng'));
-      const radius = parseFloat(await getSetting('office_radius_meters'));
-
-      const geo = checkGeofence(latitude, longitude, officeLat, officeLng, radius);
-      if (!geo.inside) {
+      const geoResult = await checkMultiOfficeGeofence(latitude, longitude);
+      if (!geoResult.allowed) {
         return res.status(403).json({
-          message: `Cannot check out: You are ${geo.distance}m away. Must be within ${radius}m of office.`,
+          message: `Cannot check out: You are ${geoResult.distance}m away from nearest office (${geoResult.nearest}). Must be within ${geoResult.radius}m.`,
         });
       }
     }
