@@ -72,11 +72,25 @@ router.get('/attendance', async (req, res) => {
         SELECT generate_series($1::date, $2::date, '1 day'::interval)::date AS date
       ),
       all_employees AS (
-        SELECT id, emp_id, name, department, branch, designation
-        FROM employees
-        WHERE role IN ('employee', 'hr') AND deleted_at IS NULL
+        SELECT e.id, e.emp_id, e.name, e.department, e.branch, e.designation
+        FROM employees e
+        WHERE e.role IN ('employee', 'hr') AND e.deleted_at IS NULL
         ${deptFilter}
         ${empFilter}
+      ),
+      dept_settings AS (
+        SELECT
+          e.id AS employee_id,
+          COALESCE(d.checkin_start,        gs_start.value,  '09:30') AS checkin_start,
+          COALESCE(d.checkin_end,          gs_end.value,    '10:15') AS checkin_end,
+          COALESCE(d.hours_present,        gs_pres.value::numeric,   8) AS hours_present,
+          COALESCE(d.hours_regularization, 7) AS hours_regularization,
+          COALESCE(d.hours_half_day,       4) AS hours_half_day
+        FROM employees e
+        LEFT JOIN departments d ON d.name = e.department
+        LEFT JOIN system_settings gs_start ON gs_start.key = 'checkin_window_start'
+        LEFT JOIN system_settings gs_end   ON gs_end.key   = 'checkin_window_end'
+        LEFT JOIN system_settings gs_pres  ON gs_pres.key  = 'work_hours_required'
       ),
       balances AS (
         SELECT lb.employee_id,
@@ -87,6 +101,14 @@ router.get('/attendance', async (req, res) => {
         FROM leave_balances lb
         WHERE lb.year = EXTRACT(YEAR FROM CURRENT_DATE)::INT
           AND lb.month = EXTRACT(MONTH FROM CURRENT_DATE)::INT
+      ),
+      computed_attendance AS (
+        SELECT 
+          employee_id, date, check_in, check_out, status, attendance_mode, leave_type,
+          EXTRACT(EPOCH FROM (check_out - check_in)) / 3600.0 AS hours_worked,
+          TO_CHAR((check_out - check_in), 'HH24:MI') AS hours_fmt,
+          (status = 'late') AS is_late
+        FROM attendance
       )
       SELECT
         ae.emp_id, ae.name, ae.designation, ae.department, ae.branch,
@@ -98,13 +120,20 @@ router.get('/attendance', async (req, res) => {
         CASE
           WHEN EXTRACT(DOW FROM ds.date) = 0 THEN 'Sunday'
           WHEN h.name IS NOT NULL THEN 'Restricted Holiday'
-          WHEN a.status = 'present' AND a.attendance_mode = 'wfh' THEN 'WFH Present'
           WHEN lr.id IS NOT NULL AND lr.status = 'approved' AND a.status IS NULL THEN 'WFH Approved (No Check-in)'
           WHEN lr.id IS NOT NULL AND lr.status = 'pending' THEN 'WFH-Pending'
-          WHEN a.status = 'present' AND a.attendance_mode = 'wfo' THEN 'WFO Present'
-          WHEN a.status = 'late' THEN 'WFO Late'
           WHEN a.status = 'casual' THEN 'Casual Leave (CL)'
           WHEN a.status = 'holiday' THEN 'Restricted Holiday'
+          WHEN a.check_in IS NOT NULL AND a.check_out IS NULL THEN
+            CASE WHEN a.attendance_mode = 'wfh' THEN 'WFH (Ongoing)' ELSE 'WFO (Ongoing)' END
+          WHEN a.check_in IS NOT NULL AND a.check_out IS NOT NULL THEN
+            CASE
+              WHEN a.hours_worked < ds_settings.hours_half_day        THEN 'Absent'
+              WHEN a.hours_worked < ds_settings.hours_regularization  THEN 'Half Day'
+              WHEN a.hours_worked < ds_settings.hours_present         THEN 'Regularization'
+              WHEN a.is_late                                           THEN 'Regularization'
+              ELSE CASE WHEN a.attendance_mode = 'wfh' THEN 'WFH Present' ELSE 'WFO Present' END
+            END
           WHEN a.status IS NULL THEN 'Absent'
           ELSE INITCAP(COALESCE(a.status, 'Absent'))
         END AS status,
@@ -112,18 +141,14 @@ router.get('/attendance', async (req, res) => {
         COALESCE(b.casual_total::text, '-') AS cl_total,
         COALESCE(b.wfh_left::text, '-') AS wfh_left,
         COALESCE(b.wfh_total::text, '-') AS wfh_total,
-        -- Calculate working hours
-        CASE
-          WHEN a.check_in IS NOT NULL AND a.check_out IS NOT NULL
-          THEN ROUND(EXTRACT(EPOCH FROM (a.check_out - a.check_in)) / 3600.0, 1)::text
-          ELSE '-'
-        END AS working_hours
+        COALESCE(a.hours_fmt, '-') AS working_hours
       FROM date_series ds
       CROSS JOIN all_employees ae
-      LEFT JOIN attendance a ON a.employee_id = ae.id AND a.date = ds.date
-      LEFT JOIN holidays h ON h.date = ds.date
-      LEFT JOIN balances b ON b.employee_id = ae.id
-      LEFT JOIN leave_requests lr ON lr.employee_id = ae.id AND ds.date BETWEEN lr.from_date AND lr.to_date AND lr.leave_type = 'wfh' AND lr.status != 'rejected'
+      LEFT JOIN computed_attendance a   ON a.employee_id = ae.id AND a.date = ds.date
+      LEFT JOIN holidays h              ON h.date = ds.date
+      LEFT JOIN balances b              ON b.employee_id = ae.id
+      LEFT JOIN dept_settings ds_settings ON ds_settings.employee_id = ae.id
+      LEFT JOIN leave_requests lr       ON lr.employee_id = ae.id AND ds.date BETWEEN lr.from_date AND lr.to_date AND lr.leave_type = 'wfh' AND lr.status != 'rejected'
       ORDER BY ds.date ASC, ae.name ASC
     `, params);
 
@@ -160,8 +185,12 @@ router.get('/attendance', async (req, res) => {
     const statusColors = {
       'WFO Present':                  'FFD4EDDA',
       'WFH Present':                  'FFD1ECF1',
+      'WFO (Ongoing)':                'FFF0F0F0',
+      'WFH (Ongoing)':                'FFF0F0F0',
+      'Half Day':                     'FFFFE5B4',
+      'Regularization':               'FFD8E2DC',
       'WFH Approved (No Check-in)':   'FFE2E3E5',
-      'WFH-Pending':                  'FFFFEeba',
+      'WFH-Pending':                  'FFFFEEBA',
       'WFO Late':                     'FFFFF3CD',
       'Casual Leave (CL)':            'FFFDE8D8',
       'Absent':                       'FFF8D7DA',

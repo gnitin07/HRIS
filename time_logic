@@ -1,0 +1,48 @@
+# Attendance Reporting Business Logic Updates
+
+This plan outlines the changes to how working hours and daily attendance statuses are calculated and displayed in the Excel report.
+
+## User Review Required
+> [!IMPORTANT]
+> - **In-Progress Status**: If an employee has checked in but *not yet checked out*, the Excel report currently defaults to "WFO Present" or "WFO Late". Under the new rules, we can't calculate their final status until they check out. I propose marking them as **WFO (Ongoing)** or **WFH (Ongoing)** if `check_out` is missing. Is this acceptable?
+> - **Prefixes**: For "Half Day" and "Regularization", do you want them prefixed with "WFH" or "WFO" (e.g., "WFH Half Day") or just plain "Half Day" and "Regularization"? The plan assumes just the plain text.
+
+## Proposed Changes
+
+### 1. Working Hours Format (HH:MM)
+- **File**: `server/routes/reports.js`
+- **Change**: Replace the decimal hours calculation (e.g., `4.2`) with an exact hours and minutes formatting (`04:12`). We will use PostgreSQL's time extraction to compute `HH:MM` securely.
+
+### 2. Dynamic Status Calculation
+- **File**: `server/routes/reports.js`
+- **Change**: The SQL `SELECT` statement generating the Excel report will be overhauled to dynamically determine the status based on `check_in` and `check_out` times:
+  - Calculate `hours_worked` as a decimal internally.
+  - Check if the original `status` at check-in was `late` (which means they checked in after the safe window).
+  - Apply the rules:
+    - `hours_worked < 4` ➡️ **Absent**
+    - `4 <= hours_worked < 7` ➡️ **Half Day**
+    - `7 <= hours_worked < 8` ➡️ **Regularization**
+    - `hours_worked >= 8` AND Checked In Late ➡️ **Regularization**
+    - `hours_worked >= 8` AND Checked In On Time ➡️ **WFO Present** (or WFH Present)
+
+### 3. Excel Colors Update
+- **Change**: Update the Excel generation logic to include colors for the new statuses:
+  - **Half Day**: Orange/Yellow variant
+  - **Regularization**: Blue/Purple variant
+  - **Ongoing**: Light gray
+
+### 4. Live Attendance Timer (Frontend)
+- **File**: `client/src/components/common/MyAttendancePanel.jsx`
+- **Change**: Add a live ticking timer that calculates the difference between the employee's `check_in` time and the current local time. 
+  - This timer will update every second (`HH:MM:SS`) if the employee is checked in but not checked out.
+  - This will be visible on the dashboards so employees know exactly when they cross the 8-hour mark to safely check out.
+
+## Verification Plan
+1. Manually edit attendance records for an employee to test edge cases:
+   - 3.5 hours worked -> Should be Absent.
+   - 5 hours worked -> Should be Half Day.
+   - 7.5 hours worked -> Should be Regularization.
+   - 8.5 hours worked (Checked in Late) -> Should be Regularization.
+   - 8.5 hours worked (Checked in On Time) -> Should be Present.
+2. Download the Excel report and verify statuses and `HH:MM` format.
+3. Check the employee dashboard after checking in to verify the live timer is ticking upwards correctly.

@@ -116,28 +116,28 @@ router.get('/today-status', auth, async (req, res) => {
       [employeeId, month, year]
     );
 
-      // Check leave type
-      const leave = leaveRes.rows[0] || null;
-      let isWfhApproved = false;
-      let onApprovedLeave = false;
-      
-      if (leave) {
-        if (leave.leave_type === 'wfh') {
-          isWfhApproved = true;
-        } else {
-          onApprovedLeave = true;
-        }
-      }
+    // Check leave type
+    const leave = leaveRes.rows[0] || null;
+    let isWfhApproved = false;
+    let onApprovedLeave = false;
 
-      res.json({
-        is_sunday: isSunday(today),
-        is_holiday: holidayRes.rows.length > 0,
-        holiday_name: holidayRes.rows[0]?.name || null,
-        attendance: attendanceRes.rows[0] || null,
-        on_approved_leave: onApprovedLeave,
-        approved_leave: leave,
-        is_wfh_approved: isWfhApproved,
-        employee: {
+    if (leave) {
+      if (leave.leave_type === 'wfh') {
+        isWfhApproved = true;
+      } else {
+        onApprovedLeave = true;
+      }
+    }
+
+    res.json({
+      is_sunday: isSunday(today),
+      is_holiday: holidayRes.rows.length > 0,
+      holiday_name: holidayRes.rows[0]?.name || null,
+      attendance: attendanceRes.rows[0] || null,
+      on_approved_leave: onApprovedLeave,
+      approved_leave: leave,
+      is_wfh_approved: isWfhApproved,
+      employee: {
         wfh_days_month: emp.wfh_days_month,
         designation: emp.designation,
         cl_total: emp.cl_total,

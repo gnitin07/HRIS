@@ -18,6 +18,7 @@ app.use(express.json()); // Parse JSON bodies
 // ─── Routes ───
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/departments', require('./routes/departments'));
+app.use('/api/office-locations', require('./routes/office_locations'));
 app.use('/api/attendance', require('./routes/attendance'));
 app.use('/api/leave', require('./routes/leave'));
 app.use('/api/tasks', require('./routes/tasks'));

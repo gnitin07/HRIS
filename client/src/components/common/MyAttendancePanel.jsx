@@ -8,6 +8,7 @@ export default function MyAttendancePanel({ title = "My Attendance Today" }) {
   const [loading, setLoading] = useState(true);
   const [locationError, setLocationError] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [liveTimer, setLiveTimer] = useState('00:00:00');
 
   const fetchData = async () => {
     try {
@@ -27,6 +28,42 @@ export default function MyAttendancePanel({ title = "My Attendance Today" }) {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Live timer — ticks every second while checked in but not checked out
+  useEffect(() => {
+    const checkIn = status?.attendance?.check_in;
+    const checkOut = status?.attendance?.check_out;
+
+    if (!checkIn || checkOut) {
+      setLiveTimer('00:00:00');
+      return;
+    }
+
+    const computeElapsed = () => {
+      // check_in is stored as HH:MM:SS (time only), combine with today's date
+      const today = new Date().toISOString().split('T')[0];
+      const checkInDate = new Date(`${today}T${checkIn}`);
+      const now = new Date();
+      const diffMs = now - checkInDate;
+
+      if (diffMs < 0) {
+        setLiveTimer('00:00:00');
+        return;
+      }
+
+      const totalSeconds = Math.floor(diffMs / 1000);
+      const h = Math.floor(totalSeconds / 3600);
+      const m = Math.floor((totalSeconds % 3600) / 60);
+      const s = totalSeconds % 60;
+      setLiveTimer(
+        `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+      );
+    };
+
+    computeElapsed();
+    const interval = setInterval(computeElapsed, 1000);
+    return () => clearInterval(interval);
+  }, [status?.attendance?.check_in, status?.attendance?.check_out]);
 
   const handleCheckInOut = () => {
     setLocationError('');
@@ -120,6 +157,42 @@ export default function MyAttendancePanel({ title = "My Attendance Today" }) {
                 <div style={styles.timeBlock}>
                   <div style={styles.timeLabel}>Check Out</div>
                   <div style={styles.timeValue}>{status?.attendance?.check_out || '--:--'}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Live timer — visible only when checked in and not yet checked out */}
+            {isCheckedIn && !isCheckedOut && (
+              <div style={{
+                marginTop: '16px',
+                padding: '16px',
+                borderRadius: '10px',
+                background: 'var(--input-bg)',
+                border: `2px solid ${liveTimer >= '08:00:00' ? 'var(--success)' : 'var(--border-color)'}`,
+                textAlign: 'center',
+                transition: 'border-color 0.4s',
+              }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>
+                  Time Worked Today
+                </div>
+                <div style={{
+                  fontSize: '2rem',
+                  fontWeight: '700',
+                  fontVariantNumeric: 'tabular-nums',
+                  color: liveTimer >= '08:00:00' ? 'var(--success)' : 'var(--text)',
+                  letterSpacing: '2px',
+                  transition: 'color 0.4s',
+                }}>
+                  {liveTimer}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: liveTimer >= '08:00:00' ? 'var(--success)' : 'var(--text-muted)', marginTop: '4px' }}>
+                  {liveTimer >= '08:00:00'
+                    ? '✅ 8 hours done — safe to check out!'
+                    : liveTimer >= '07:00:00'
+                    ? '⚠️ Almost there — 7+ hrs, checkout = Regularization'
+                    : liveTimer >= '04:00:00'
+                    ? '🕐 4+ hrs — checkout now = Half Day'
+                    : '🔴 Under 4 hrs — checkout now = Absent'}
                 </div>
               </div>
             )}

@@ -17,6 +17,8 @@ router.get('/', auth, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT d.id, d.name, d.hr_id, d.created_at,
+             d.checkin_start, d.checkin_end,
+             d.hours_present, d.hours_regularization, d.hours_half_day,
              e.name AS hr_name, e.emp_id AS hr_emp_id, e.email AS hr_email
       FROM departments d
       LEFT JOIN employees e ON d.hr_id = e.id
@@ -53,7 +55,7 @@ router.post('/', auth, roleCheck('super_admin'), async (req, res) => {
 });
 
 router.put('/:id', auth, roleCheck('super_admin'), async (req, res) => {
-  const { name, hr_id } = req.body;
+  const { name, hr_id, checkin_start, checkin_end, hours_present, hours_regularization, hours_half_day } = req.body;
   const deptId = req.params.id;
 
   try {
@@ -77,12 +79,26 @@ router.put('/:id', auth, roleCheck('super_admin'), async (req, res) => {
       }
     }
 
-    const newName = name?.trim() || existing.rows[0].name;
-    const newHrId = hr_id === '' || hr_id === null ? null : (hr_id ?? existing.rows[0].hr_id);
+    const newName  = name?.trim() || existing.rows[0].name;
+    const newHrId  = hr_id === '' || hr_id === null ? null : (hr_id ?? existing.rows[0].hr_id);
+
+    // Schedule fields: empty string → NULL (means use global system_settings)
+    const toNum = (v, fallback) => (v === '' || v === undefined || v === null) ? fallback : parseFloat(v);
+    const toStr = (v, fallback) => (v === '' || v === undefined || v === null) ? fallback : v;
+
+    const newCheckinStart        = toStr(checkin_start,         existing.rows[0].checkin_start);
+    const newCheckinEnd          = toStr(checkin_end,           existing.rows[0].checkin_end);
+    const newHoursPresent        = toNum(hours_present,         existing.rows[0].hours_present);
+    const newHoursRegularization = toNum(hours_regularization,  existing.rows[0].hours_regularization);
+    const newHoursHalfDay        = toNum(hours_half_day,        existing.rows[0].hours_half_day);
 
     const result = await pool.query(
-      'UPDATE departments SET name = $1, hr_id = $2 WHERE id = $3 RETURNING *',
-      [newName, newHrId, deptId]
+      `UPDATE departments 
+       SET name=$1, hr_id=$2, checkin_start=$3, checkin_end=$4,
+           hours_present=$5, hours_regularization=$6, hours_half_day=$7
+       WHERE id=$8 RETURNING *`,
+      [newName, newHrId, newCheckinStart, newCheckinEnd,
+       newHoursPresent, newHoursRegularization, newHoursHalfDay, deptId]
     );
 
     if (newHrId) {

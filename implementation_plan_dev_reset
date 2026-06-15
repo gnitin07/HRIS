@@ -1,0 +1,48 @@
+# WFH Flow Changes & Developer Panel Enhancements
+
+This plan outlines the steps to change the Work From Home (WFH) flow to an approval-based system (similar to Casual Leaves), add a database reset tool in the Developer Panel, and provide a way to reset the developer password.
+
+## User Review Required
+> [!IMPORTANT]
+> The quick "Mark WFH" button on the dashboard will be removed. Employees will now apply for WFH via the **Leave Management** tab. Does this align with your vision?
+> Please verify that when WFH is approved but the employee *forgets to check in*, you want them to be marked as "Absent" or "WFH (No Check-in)". Currently, the plan assumes they MUST check in.
+
+## Proposed Changes
+
+### 1. Developer Password Reset
+I will create a standalone script `server/utils/reset_dev_pass.js` that you can run locally to reset the developer password if lost.
+
+### 2. Developer Panel: WFH Reset Tool
+- **Backend (`server/routes/system.js`)**: Add a new API endpoint `POST /api/system/reset-wfh` accessible only by `developer` or `super_admin` to clear a specific employee's WFH attendance for a given date and refund their WFH balance.
+- **Frontend (`client/src/pages/DeveloperDashboard.jsx`)**: Add a new card and modal to input the `Emp ID` and `Date` to trigger this reset tool directly from the UI.
+
+### 3. WFH Approval Flow (Backend)
+- **`server/routes/leave.js`**: Update the leave approval logic. When a `wfh` request is approved, deduct from `wfh_used` instead of `casual_used`. Unlike CL, it will **not** automatically mark their attendance as "leave"; it will wait for the employee to check in.
+- **`server/routes/attendance.js`**:
+  - **Check-in (`POST /api/attendance/checkin`)**: Update the geofence logic. If the employee has an **approved WFH** request for today, bypass the geofence validation, allow the check-in, and set `attendance_mode='wfh'`.
+  - **Status (`GET /api/attendance/today-status`)**: Provide WFH request status to the frontend so it knows whether to allow remote check-in.
+  - **Remove** the old `POST /api/attendance/wfh` quick-mark route.
+
+### 4. Excel Report Updates
+- **`server/routes/reports.js`**: Update the SQL query to `LEFT JOIN` the `leave_requests` table.
+  - If a WFH request is `pending`, the Excel status will show **WFH-Pending**.
+  - If approved and checked in, it will show **WFH Present** along with the working hours.
+  - If approved but *not* checked in, it will show **WFH Approved (No Check-in)**.
+
+### 5. Frontend WFH UI
+- **`client/src/components/common/MyAttendancePanel.jsx`**: Remove the instant "Mark WFH" button. Replace it with a note indicating WFH must be applied for via the Leave tab.
+- If WFH is approved for today, the "Check In" button will be active (geofence ignored by backend).
+
+## Verification Plan
+### Automated Tests
+N/A (No automated test suite found, will rely on local manual testing).
+
+### Manual Verification
+1. Run the server locally.
+2. Apply for WFH as an employee -> Check if status is pending.
+3. Check Excel report -> Should say "WFH-Pending".
+4. Approve WFH as HR -> Apply deduction to WFH balance.
+5. Employee clicks Check In (from a remote location) -> Should succeed.
+6. Employee clicks Check Out -> Hours should be logged.
+7. Check Excel report -> Should say "WFH Present" with hours.
+8. Test Developer WFH reset tool via UI -> Should clear the record and refund balance.
