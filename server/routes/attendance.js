@@ -224,9 +224,21 @@ router.post('/checkin', auth, async (req, res) => {
 
       // Already checked in but not out → this is a checkout
       if (record.check_in && !record.check_out) {
+        // Validate geofence on checkout for WFO employees
+        if (record.attendance_mode === 'wfo') {
+          const officeLat = parseFloat(await getSetting('office_lat'));
+          const officeLng = parseFloat(await getSetting('office_lng'));
+          const radius = parseFloat(await getSetting('office_radius_meters'));
+          const geo = checkGeofence(latitude, longitude, officeLat, officeLng, radius);
+          if (!geo.inside) {
+            return res.status(403).json({
+              message: `Cannot check out: You are ${geo.distance}m away. Must be within ${radius}m of office.`,
+            });
+          }
+        }
         await pool.query(
-          'UPDATE attendance SET check_out = $1 WHERE employee_id = $2 AND date = $3',
-          [timeStr, employeeId, today]
+          'UPDATE attendance SET check_out = $1, check_out_lat = $4, check_out_lng = $5 WHERE employee_id = $2 AND date = $3',
+          [timeStr, employeeId, today, latitude, longitude]
         );
         return res.json({ message: 'Checked out successfully', type: 'checkout', time: timeStr });
       }
@@ -264,9 +276,10 @@ router.post('/checkin', auth, async (req, res) => {
 
 /* ═══════════════════════════════════════
    POST /api/attendance/checkout
-   Separate checkout endpoint
+   Separate checkout endpoint — GPS geofence validated for WFO
    ═══════════════════════════════════════ */
 router.post('/checkout', auth, async (req, res) => {
+  const { latitude, longitude } = req.body;
   const employeeId = req.user.id;
   const today = getTodayDate();
   const timeStr = getCurrentTime();
@@ -285,9 +298,29 @@ router.post('/checkout', auth, async (req, res) => {
       return res.status(400).json({ message: 'Already checked out today.' });
     }
 
+    const record = existing.rows[0];
+
+    // Validate geofence for WFO employees (WFH employees can check out from anywhere)
+    if (record.attendance_mode === 'wfo') {
+      if (!latitude || !longitude) {
+        return res.status(400).json({ message: 'Location is required for checkout.' });
+      }
+
+      const officeLat = parseFloat(await getSetting('office_lat'));
+      const officeLng = parseFloat(await getSetting('office_lng'));
+      const radius = parseFloat(await getSetting('office_radius_meters'));
+
+      const geo = checkGeofence(latitude, longitude, officeLat, officeLng, radius);
+      if (!geo.inside) {
+        return res.status(403).json({
+          message: `Cannot check out: You are ${geo.distance}m away. Must be within ${radius}m of office.`,
+        });
+      }
+    }
+
     await pool.query(
-      'UPDATE attendance SET check_out = $1 WHERE employee_id = $2 AND date = $3',
-      [timeStr, employeeId, today]
+      'UPDATE attendance SET check_out = $1, check_out_lat = $4, check_out_lng = $5 WHERE employee_id = $2 AND date = $3',
+      [timeStr, employeeId, today, latitude || null, longitude || null]
     );
 
     res.json({ message: 'Checked out successfully', time: timeStr });

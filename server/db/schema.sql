@@ -61,6 +61,8 @@ CREATE TABLE IF NOT EXISTS attendance (
   check_out       TIME,
   check_in_lat    DECIMAL(10, 7),
   check_in_lng    DECIMAL(10, 7),
+  check_out_lat   DECIMAL(10, 7),
+  check_out_lng   DECIMAL(10, 7),
   status          VARCHAR(20),       -- present | late | absent | casual | holiday | wfh
   attendance_mode VARCHAR(10),       -- wfo | wfh | leave | holiday
   leave_type      VARCHAR(20),
