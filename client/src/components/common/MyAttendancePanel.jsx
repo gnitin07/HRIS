@@ -40,10 +40,10 @@ export default function MyAttendancePanel({ title = "My Attendance Today" }) {
     }
 
     const computeElapsed = () => {
-      // check_in is stored as HH:MM:SS (time only), combine with today's date
-      const today = new Date().toISOString().split('T')[0];
-      const checkInDate = new Date(`${today}T${checkIn}`);
+      // Use local date (not UTC) to match the server's IST-based check_in time
       const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const checkInDate = new Date(`${today}T${checkIn}`);
       const diffMs = now - checkInDate;
 
       if (diffMs < 0) {
