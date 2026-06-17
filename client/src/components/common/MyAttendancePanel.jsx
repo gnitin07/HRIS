@@ -187,7 +187,7 @@ export default function MyAttendancePanel({ title = "My Attendance Today" }) {
                 </div>
                 <div style={{ fontSize: '0.8rem', color: liveTimer >= '08:00:00' ? 'var(--success)' : 'var(--text-muted)', marginTop: '4px' }}>
                   {liveTimer >= '08:00:00'
-                    ? '✅ 8 hours done — safe to check out!'
+                    ? '😊 8 hours done — safe to check out!'
                     : liveTimer >= '07:00:00'
                     ? '⚠️ Almost there — 7+ hrs, checkout = Regularization'
                     : liveTimer >= '04:00:00'
