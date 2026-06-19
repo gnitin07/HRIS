@@ -162,6 +162,18 @@ router.put('/approve/:id', auth, roleCheck('hr', 'super_admin'), async (req, res
            WHERE employee_id = $1 AND year = $2 AND month = $3`,
           [leave.employee_id, year, month]
         );
+      } else if (leave.leave_type === 'regularization') {
+        await pool.query(
+          `UPDATE leave_balances SET regularization_used = regularization_used + 1
+           WHERE employee_id = $1 AND year = $2 AND month = $3`,
+          [leave.employee_id, year, month]
+        );
+      } else if (leave.leave_type === 'half_day') {
+        await pool.query(
+          `UPDATE leave_balances SET casual_used = casual_used + 0.5
+           WHERE employee_id = $1 AND year = $2 AND month = $3`,
+          [leave.employee_id, year, month]
+        );
       }
 
       // Mark attendance as leave
@@ -176,6 +188,22 @@ router.put('/approve/:id', auth, roleCheck('hr', 'super_admin'), async (req, res
              VALUES ($1, $2, 'casual', 'leave', $3)
              ON CONFLICT (employee_id, date) 
              DO UPDATE SET status='casual', attendance_mode='leave', leave_type=$3`,
+            [leave.employee_id, leaveDate, leave.leave_type]
+          );
+        } else if (leave.leave_type === 'regularization') {
+          await pool.query(
+            `INSERT INTO attendance (employee_id, date, status, attendance_mode, leave_type)
+             VALUES ($1, $2, 'regularized', 'wfo', $3)
+             ON CONFLICT (employee_id, date) 
+             DO UPDATE SET status='regularized', leave_type=$3`,
+            [leave.employee_id, leaveDate, leave.leave_type]
+          );
+        } else if (leave.leave_type === 'half_day') {
+          await pool.query(
+            `INSERT INTO attendance (employee_id, date, status, attendance_mode, leave_type)
+             VALUES ($1, $2, 'half_day', 'wfo', $3)
+             ON CONFLICT (employee_id, date) 
+             DO UPDATE SET status='half_day', leave_type=$3`,
             [leave.employee_id, leaveDate, leave.leave_type]
           );
         }
