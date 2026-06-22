@@ -5,15 +5,36 @@ import { getLocalToday } from '../../utils/dateUtils';
 
 export default function Leave() {
   const [applications, setApplications] = useState([]);
+  const [leaveStats, setLeaveStats] = useState({ balance: null, pending_cl: 0, pending_reg: 0, max_regularizations: 3 });
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   
   const [formData, setFormData] = useState({ leave_type: 'casual', from_date: '', to_date: '', reason: '' });
 
+  const todayDate = new Date();
+  const currentMonthStart = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1).toLocaleDateString('en-CA');
+  const currentMonthEnd = new Date(todayDate.getFullYear(), todayDate.getMonth() + 1, 0).toLocaleDateString('en-CA');
+
+  const getMinDate = () => {
+    if (formData.leave_type === 'casual') return currentMonthStart;
+    return undefined; // Usually past is allowed for regularization, we let it be open
+  };
+
+  const getMaxDate = () => {
+    if (formData.leave_type === 'casual') return currentMonthEnd;
+    return undefined;
+  };
+
   const fetchLeaves = async () => {
     try {
       const res = await api.get('/leave/my');
       setApplications(res.data.applications);
+      setLeaveStats({
+        balance: res.data.balance,
+        pending_cl: res.data.pending_cl,
+        pending_reg: res.data.pending_reg,
+        max_regularizations: res.data.max_regularizations
+      });
     } catch (err) {
       console.error(err);
     } finally {
@@ -54,22 +75,37 @@ export default function Leave() {
       {showForm && (
         <div className="glass-panel animate-fade-in" style={{ padding: '24px' }}>
           <h3 style={{ marginBottom: '16px' }}>New Leave Application</h3>
+          
+          {leaveStats.balance && (
+            <div style={{ marginBottom: '16px', padding: '12px', background: 'var(--input-bg)', borderRadius: '8px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+              <div style={{ marginBottom: '4px' }}>
+                <strong style={{ color: 'var(--text-color)' }}>CL Available:</strong> {leaveStats.balance.casual_total - leaveStats.balance.casual_used - leaveStats.pending_cl} 
+                <span style={{ fontSize: '0.8rem', marginLeft: '6px' }}>(On Hold: {leaveStats.pending_cl})</span>
+              </div>
+              <div>
+                <strong style={{ color: 'var(--text-color)' }}>Regularizations Available:</strong> {leaveStats.max_regularizations - (leaveStats.balance.regularization_used || 0) - leaveStats.pending_reg} 
+                <span style={{ fontSize: '0.8rem', marginLeft: '6px' }}>(On Hold: {leaveStats.pending_reg})</span>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '500px' }}>
             <div>
               <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-muted)' }}>Leave Type</label>
-              <select className="input-field" value={formData.leave_type} onChange={(e) => setFormData({...formData, leave_type: e.target.value})} required>
+              <select className="input-field" value={formData.leave_type} onChange={(e) => setFormData({...formData, leave_type: e.target.value, from_date: '', to_date: ''})} required>
                 <option value="casual">Casual Leave (CL)</option>
                 <option value="wfh">Work From Home (WFH)</option>
+                <option value="regularization">Regularization</option>
               </select>
             </div>
             <div style={{ display: 'flex', gap: '16px' }}>
               <div style={{ flex: 1 }}>
                 <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-muted)' }}>From Date</label>
-                <input type="date" className="input-field" value={formData.from_date} onChange={(e) => setFormData({...formData, from_date: e.target.value})} required min={getLocalToday()} />
+                <input type="date" className="input-field" value={formData.from_date} onChange={(e) => setFormData({...formData, from_date: e.target.value})} required min={getMinDate()} max={getMaxDate()} />
               </div>
               <div style={{ flex: 1 }}>
                 <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-muted)' }}>To Date</label>
-                <input type="date" className="input-field" value={formData.to_date} onChange={(e) => setFormData({...formData, to_date: e.target.value})} required min={formData.from_date || getLocalToday()} />
+                <input type="date" className="input-field" value={formData.to_date} onChange={(e) => setFormData({...formData, to_date: e.target.value})} required min={formData.from_date || getMinDate()} max={getMaxDate()} />
               </div>
             </div>
             <div>

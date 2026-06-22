@@ -82,6 +82,7 @@ export default function Departments() {
           hours_present:        dept.hours_present        || '',
           hours_regularization: dept.hours_regularization || '',
           hours_half_day:       dept.hours_half_day       || '',
+          max_regularizations:  dept.max_regularizations  || '',
         },
       }));
     }
@@ -104,6 +105,7 @@ export default function Departments() {
         hours_present:        edits.hours_present        || null,
         hours_regularization: edits.hours_regularization || null,
         hours_half_day:       edits.hours_half_day       || null,
+        max_regularizations:  edits.max_regularizations  || null,
       });
       await fetchData();
       setExpandedSchedule(prev => ({ ...prev, [deptId]: false }));
@@ -278,6 +280,16 @@ export default function Departments() {
                         placeholder="e.g. 4"
                         value={scheduleEdits[dept.id]?.hours_half_day || ''}
                         onChange={e => handleScheduleChange(dept.id, 'hours_half_day', e.target.value)}
+                      />
+                    </label>
+                    <label style={styles.label}>
+                      Max Regularizations (override)
+                      <input
+                        type="number" min="0" max="30"
+                        className="input-field"
+                        placeholder="e.g. 3"
+                        value={scheduleEdits[dept.id]?.max_regularizations || ''}
+                        onChange={e => handleScheduleChange(dept.id, 'max_regularizations', e.target.value)}
                       />
                     </label>
                   </div>

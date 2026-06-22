@@ -10,6 +10,7 @@ export default function SASettings() {
     office_lat: '28.5700',
     office_lng: '77.3210',
     office_radius_meters: '200',
+    max_regularizations: '3',
   });
   const [offices, setOffices] = useState([]);
   
@@ -144,6 +145,10 @@ export default function SASettings() {
           <div>
             <label style={styles.label}>Default Work Hours</label>
             <input type="number" className="input-field" value={settings.work_hours_required || ''} onChange={(e) => handleSettingsChange('work_hours_required', e.target.value)} min="1" max="12" required />
+          </div>
+          <div>
+            <label style={styles.label}>Max Regularizations/mo</label>
+            <input type="number" className="input-field" value={settings.max_regularizations || ''} onChange={(e) => handleSettingsChange('max_regularizations', e.target.value)} min="0" required />
           </div>
         </div>
 

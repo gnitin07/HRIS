@@ -18,7 +18,7 @@ router.get('/', auth, async (req, res) => {
     const result = await pool.query(`
       SELECT d.id, d.name, d.hr_id, d.created_at,
              d.checkin_start, d.checkin_end,
-             d.hours_present, d.hours_regularization, d.hours_half_day,
+             d.hours_present, d.hours_regularization, d.hours_half_day, d.max_regularizations,
              e.name AS hr_name, e.emp_id AS hr_emp_id, e.email AS hr_email
       FROM departments d
       LEFT JOIN employees e ON d.hr_id = e.id
@@ -55,7 +55,7 @@ router.post('/', auth, roleCheck('super_admin'), async (req, res) => {
 });
 
 router.put('/:id', auth, roleCheck('super_admin'), async (req, res) => {
-  const { name, hr_id, checkin_start, checkin_end, hours_present, hours_regularization, hours_half_day } = req.body;
+  const { name, hr_id, checkin_start, checkin_end, hours_present, hours_regularization, hours_half_day, max_regularizations } = req.body;
   const deptId = req.params.id;
 
   try {
@@ -91,14 +91,15 @@ router.put('/:id', auth, roleCheck('super_admin'), async (req, res) => {
     const newHoursPresent        = toNum(hours_present,         existing.rows[0].hours_present);
     const newHoursRegularization = toNum(hours_regularization,  existing.rows[0].hours_regularization);
     const newHoursHalfDay        = toNum(hours_half_day,        existing.rows[0].hours_half_day);
+    const newMaxRegularizations  = toNum(max_regularizations,   existing.rows[0].max_regularizations);
 
     const result = await pool.query(
       `UPDATE departments 
        SET name=$1, hr_id=$2, checkin_start=$3, checkin_end=$4,
-           hours_present=$5, hours_regularization=$6, hours_half_day=$7
-       WHERE id=$8 RETURNING *`,
+           hours_present=$5, hours_regularization=$6, hours_half_day=$7, max_regularizations=$8
+       WHERE id=$9 RETURNING *`,
       [newName, newHrId, newCheckinStart, newCheckinEnd,
-       newHoursPresent, newHoursRegularization, newHoursHalfDay, deptId]
+       newHoursPresent, newHoursRegularization, newHoursHalfDay, newMaxRegularizations, deptId]
     );
 
     if (newHrId) {

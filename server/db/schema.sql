@@ -211,5 +211,6 @@ INSERT INTO system_settings (key, value) VALUES
   ('work_hours_required',  '8'),
   ('office_lat',           '28.5700'),
   ('office_lng',           '77.3210'),
-  ('office_radius_meters', '200')
+  ('office_radius_meters', '200'),
+  ('max_regularizations',  '3')
 ON CONFLICT (key) DO NOTHING;

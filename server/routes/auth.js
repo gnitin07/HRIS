@@ -284,6 +284,25 @@ router.put('/employees/:id', auth, roleCheck('super_admin', 'developer'), async 
 
     await pool.query(query, params);
 
+    if (cl_total !== undefined || wfh_days_month !== undefined) {
+      const year = new Date().getFullYear();
+      const month = new Date().getMonth() + 1;
+      let updateBalancesQuery = `UPDATE leave_balances SET `;
+      const balParams = [];
+      if (cl_total !== undefined) {
+        balParams.push(cl_total);
+        updateBalancesQuery += `casual_total=$${balParams.length}`;
+      }
+      if (wfh_days_month !== undefined) {
+        if (balParams.length > 0) updateBalancesQuery += `, `;
+        balParams.push(wfh_days_month);
+        updateBalancesQuery += `wfh_total=$${balParams.length}`;
+      }
+      balParams.push(req.params.id, year, month);
+      updateBalancesQuery += ` WHERE employee_id=$${balParams.length - 2} AND year=$${balParams.length - 1} AND month=$${balParams.length}`;
+      await pool.query(updateBalancesQuery, balParams);
+    }
+
     await logAudit({
       userId: req.user.id,
       action: 'employee_updated',

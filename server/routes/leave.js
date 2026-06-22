@@ -37,6 +37,69 @@ router.post('/apply', auth, async (req, res) => {
       return res.status(400).json({ message: 'You already have a leave request for this date range.' });
     }
 
+    const year = new Date().getFullYear();
+    const month = new Date().getMonth() + 1;
+
+    if (leave_type === 'casual') {
+      const fromD = new Date(from_date);
+      const toD = new Date(to_date);
+      if (fromD.getMonth() + 1 !== month || fromD.getFullYear() !== year || 
+          toD.getMonth() + 1 !== month || toD.getFullYear() !== year) {
+        return res.status(400).json({ message: 'Casual leaves must be applied within the current month.' });
+      }
+
+      const balRes = await pool.query(
+        'SELECT casual_total, casual_used FROM leave_balances WHERE employee_id = $1 AND year = $2 AND month = $3',
+        [employeeId, year, month]
+      );
+      if (balRes.rows.length > 0) {
+        const { casual_total, casual_used } = balRes.rows[0];
+        const pendingRes = await pool.query(
+          `SELECT COUNT(*) FROM leave_requests 
+           WHERE employee_id = $1 AND leave_type = 'casual' AND status = 'pending'
+           AND EXTRACT(MONTH FROM from_date) = $2 AND EXTRACT(YEAR FROM from_date) = $3`,
+          [employeeId, month, year]
+        );
+        const pendingCount = parseInt(pendingRes.rows[0].count);
+
+        if ((casual_total - casual_used) - pendingCount < 1) {
+          return res.status(400).json({ message: `Insufficient CL balance. Available: ${casual_total - casual_used}, On Hold: ${pendingCount}.` });
+        }
+      } else {
+        return res.status(400).json({ message: 'Leave balance not initialized for this month. Please Check In or contact HR.' });
+      }
+    }
+
+    if (leave_type === 'regularization') {
+      const deptRes = await pool.query(`SELECT d.max_regularizations FROM employees e LEFT JOIN departments d ON e.department = d.name WHERE e.id = $1`, [employeeId]);
+      let maxReg;
+      if (deptRes.rows.length > 0 && deptRes.rows[0].max_regularizations !== null) {
+        maxReg = parseInt(deptRes.rows[0].max_regularizations);
+      } else {
+        const settingRes = await pool.query("SELECT value FROM system_settings WHERE key = 'max_regularizations'");
+        maxReg = settingRes.rows.length > 0 ? parseInt(settingRes.rows[0].value) : 3;
+      }
+
+      const balRes = await pool.query(
+        'SELECT regularization_used FROM leave_balances WHERE employee_id = $1 AND year = $2 AND month = $3',
+        [employeeId, year, month]
+      );
+      
+      const regUsed = balRes.rows.length > 0 ? (balRes.rows[0].regularization_used || 0) : 0;
+      
+      const pendingRes = await pool.query(
+        `SELECT COUNT(*) FROM leave_requests 
+         WHERE employee_id = $1 AND leave_type = 'regularization' AND status = 'pending'
+         AND EXTRACT(MONTH FROM from_date) = $2 AND EXTRACT(YEAR FROM from_date) = $3`,
+        [employeeId, month, year]
+      );
+      const pendingCount = parseInt(pendingRes.rows[0].count);
+
+      if ((maxReg - regUsed) - pendingCount < 1) {
+        return res.status(400).json({ message: `Regularization limit reached. Used: ${regUsed}, Pending: ${pendingCount}, Max: ${maxReg}.` });
+      }
+    }
+
     await pool.query(
       `INSERT INTO leave_requests (employee_id, leave_type, from_date, to_date, reason, status)
        VALUES ($1, $2, $3, $4, $5, 'pending')`,
@@ -71,9 +134,31 @@ router.get('/my', auth, async (req, res) => {
       [employeeId, year, month]
     );
 
+    const pendingCl = await pool.query(
+      `SELECT COUNT(*) FROM leave_requests WHERE employee_id = $1 AND leave_type = 'casual' AND status = 'pending' AND EXTRACT(MONTH FROM from_date) = $2 AND EXTRACT(YEAR FROM from_date) = $3`,
+      [employeeId, month, year]
+    );
+
+    const pendingReg = await pool.query(
+      `SELECT COUNT(*) FROM leave_requests WHERE employee_id = $1 AND leave_type = 'regularization' AND status = 'pending' AND EXTRACT(MONTH FROM from_date) = $2 AND EXTRACT(YEAR FROM from_date) = $3`,
+      [employeeId, month, year]
+    );
+
+    const deptRes = await pool.query(`SELECT d.max_regularizations FROM employees e LEFT JOIN departments d ON e.department = d.name WHERE e.id = $1`, [employeeId]);
+    let maxReg;
+    if (deptRes.rows.length > 0 && deptRes.rows[0].max_regularizations !== null) {
+      maxReg = parseInt(deptRes.rows[0].max_regularizations);
+    } else {
+      const settingRes = await pool.query("SELECT value FROM system_settings WHERE key = 'max_regularizations'");
+      maxReg = settingRes.rows.length > 0 ? parseInt(settingRes.rows[0].value) : 3;
+    }
+
     res.json({
       applications: applications.rows,
       balance: balance.rows[0] || null,
+      pending_cl: parseInt(pendingCl.rows[0].count),
+      pending_reg: parseInt(pendingReg.rows[0].count),
+      max_regularizations: maxReg,
     });
   } catch (err) {
     console.error('My leave error:', err.message);
