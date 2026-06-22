@@ -530,11 +530,60 @@ router.put('/edit', auth, roleCheck('super_admin'), async (req, res) => {
    ═══════════════════════════════════════ */
 router.get('/my', auth, async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM attendance WHERE employee_id = $1 ORDER BY date DESC LIMIT 30',
-      [req.user.id]
-    );
-    res.json({ data: result.rows });
+    const employeeId = req.user.id;
+    
+    // Get dept thresholds
+    const deptRes = await pool.query(`
+      SELECT 
+        COALESCE(d.hours_present, gs_pres.value::numeric, 8) AS hours_present,
+        COALESCE(d.checkin_end, gs_end.value, '10:15') AS checkin_end
+      FROM employees e
+      LEFT JOIN departments d ON d.name = e.department
+      LEFT JOIN system_settings gs_pres ON gs_pres.key = 'work_hours_required'
+      LEFT JOIN system_settings gs_end ON gs_end.key = 'checkin_window_end'
+      WHERE e.id = $1
+    `, [employeeId]);
+    const thresholds = deptRes.rows[0] || { hours_present: 8, checkin_end: '10:15' };
+    const [endH, endM] = thresholds.checkin_end.split(':').map(Number);
+    const endMins = endH * 60 + endM;
+
+    const result = await pool.query(`
+      SELECT a.*, EXTRACT(EPOCH FROM (a.check_out - a.check_in)) / 3600.0 AS hours_worked
+      FROM attendance a WHERE a.employee_id = $1 ORDER BY a.date DESC LIMIT 30
+    `, [employeeId]);
+
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const data = result.rows.map(row => {
+      let status = row.status;
+      
+      // If already has a final status, leave it
+      if (['casual', 'holiday', 'absent', 'half_day'].includes(status) || (status && status.startsWith('reg_'))) {
+        return row;
+      }
+
+      // Compute if late or short
+      let isLate = false;
+      if (row.check_in) {
+        const [inH, inM] = row.check_in.split(':').map(Number);
+        if ((inH * 60 + inM) > endMins) isLate = true;
+      }
+
+      const isPastDay = new Date(row.date).toISOString().split('T')[0] < todayStr;
+      const hw = parseFloat(row.hours_worked) || 0;
+      
+      let isShort = false;
+      if (row.check_out === null && isPastDay) isShort = true;
+      else if (row.check_out !== null && hw < parseFloat(thresholds.hours_present)) isShort = true;
+
+      if (isLate || isShort || status === 'late') {
+        row.status = 'Needs Regularization'; // Show this in the Attendance UI
+      }
+
+      return row;
+    });
+
+    res.json({ data });
   } catch (err) {
     console.error('My attendance error:', err.message);
     res.status(500).json({ message: 'Server error' });

@@ -128,10 +128,13 @@ router.get('/attendance', async (req, res) => {
             CASE WHEN a.attendance_mode = 'wfh' THEN 'WFH (Ongoing)' ELSE 'WFO (Ongoing)' END
           WHEN a.check_in IS NOT NULL AND a.check_out IS NOT NULL THEN
             CASE
+              WHEN a.status = 'reg_1' THEN 'Reg 1'
+              WHEN a.status = 'reg_2' THEN 'Reg 2'
+              WHEN a.status = 'reg_3' THEN 'Reg 3'
+              WHEN a.status LIKE 'reg_%' THEN 'Regularized'
               WHEN a.hours_worked < ds_settings.hours_half_day        THEN 'Absent'
-              WHEN a.hours_worked < ds_settings.hours_regularization  THEN 'Half Day'
-              WHEN a.hours_worked < ds_settings.hours_present         THEN 'Regularization'
-              WHEN a.is_late                                           THEN 'Regularization'
+              WHEN a.hours_worked < ds_settings.hours_present         THEN 'Half Day'
+              WHEN a.is_late                                           THEN 'Half Day'
               ELSE CASE WHEN a.attendance_mode = 'wfh' THEN 'WFH Present' ELSE 'WFO Present' END
             END
           WHEN a.status IS NULL THEN 'Absent'
@@ -188,7 +191,10 @@ router.get('/attendance', async (req, res) => {
       'WFO (Ongoing)':                'FFF0F0F0',
       'WFH (Ongoing)':                'FFF0F0F0',
       'Half Day':                     'FFFFE5B4',
-      'Regularization':               'FFD8E2DC',
+      'Reg 1':                        'FFD8E2DC',
+      'Reg 2':                        'FFD8E2DC',
+      'Reg 3':                        'FFD8E2DC',
+      'Regularized':                  'FFD8E2DC',
       'WFH Approved (No Check-in)':   'FFE2E3E5',
       'WFH-Pending':                  'FFFFEEBA',
       'WFO Late':                     'FFFFF3CD',

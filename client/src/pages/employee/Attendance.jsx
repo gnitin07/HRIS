@@ -67,12 +67,18 @@ export default function Attendance() {
 
 function getStatusStyle(status) {
   const base = { padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: '600' };
+  if (status && status.startsWith('reg_')) {
+    return { ...base, background: 'rgba(16, 185, 129, 0.15)', color: '#059669' };
+  }
   switch (status) {
     case 'present': return { ...base, background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)' };
     case 'late': return { ...base, background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)' };
+    case 'Needs Regularization': return { ...base, background: 'rgba(245, 158, 11, 0.15)', color: '#d97706' };
     case 'absent': return { ...base, background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)' };
     case 'casual': return { ...base, background: 'rgba(139, 92, 246, 0.1)', color: 'var(--secondary)' };
     case 'holiday': return { ...base, background: 'rgba(148, 163, 184, 0.1)', color: 'var(--text-muted)' };
+    case 'half_day': return { ...base, background: 'rgba(245, 158, 11, 0.15)', color: '#d97706' };
+    case 'regularized': return { ...base, background: 'rgba(16, 185, 129, 0.15)', color: '#059669' };
     default: return { ...base, background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)' };
   }
 }
