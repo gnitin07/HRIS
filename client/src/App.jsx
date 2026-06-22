@@ -11,6 +11,7 @@ import EmployeeAttendance from './pages/employee/Attendance';
 import EmployeeLeave from './pages/employee/Leave';
 import EmployeeTasks from './pages/employee/Tasks';
 import EmployeeTickets from './pages/employee/Tickets';
+import EmployeeRegularization from './pages/employee/Regularization';
 
 import HRDashboard from './pages/HRDashboard';
 import HREmployees from './pages/hr/Employees';
@@ -48,6 +49,7 @@ function App() {
             <Route path="/employee" element={<EmployeeDashboard />} />
             <Route path="/employee/attendance" element={<EmployeeAttendance />} />
             <Route path="/employee/leave" element={<EmployeeLeave />} />
+            <Route path="/employee/regularization" element={<EmployeeRegularization />} />
             <Route path="/employee/tasks" element={<EmployeeTasks />} />
             <Route path="/employee/tickets" element={<EmployeeTickets />} />
           </Route>

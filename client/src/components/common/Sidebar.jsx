@@ -19,6 +19,7 @@ export default function Sidebar() {
           { to: '/employee', icon: <Home size={20} />, label: 'Dashboard' },
           { to: '/employee/attendance', icon: <Clock size={20} />, label: 'Attendance' },
           { to: '/employee/leave', icon: <Calendar size={20} />, label: 'Leave' },
+          { to: '/employee/regularization', icon: <Clock size={20} />, label: 'Regularization' },
           { to: '/employee/tasks', icon: <CheckSquare size={20} />, label: 'Tasks' },
           { to: '/employee/tickets', icon: <MessageSquare size={20} />, label: 'Tickets' },
         ];
